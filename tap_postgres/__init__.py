@@ -854,8 +854,6 @@ def main_impl():
                     default_replication_method, default_replication_key, state)
         else:
             LOGGER.info("No properties were selected")
-    except Exception as ex:
-        LOGGER.critical(ex)
     finally:
         if tunnel is not None:
             tunnel.stop()

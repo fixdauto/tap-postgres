@@ -50,7 +50,11 @@ def sync_table(conn_info, stream, state, desired_columns, md_map, default_replic
 
     replication_key = md_map.get((), {}).get('replication-key', default_replication_key)
     replication_key_value = singer.get_bookmark(state, stream['tap_stream_id'], 'replication_key_value')
-    replication_key_sql_datatype = md_map.get(('properties', replication_key)).get('sql-datatype')
+    replication_key_column = md_map.get(('properties', replication_key))
+    if not replication_key_column:
+        raise Exception("Replication key '{}' not found on stream '{}'".format(replication_key, stream['tap_stream_id']))
+
+    replication_key_sql_datatype = replication_key_column.get('sql-datatype')
 
     hstore_available = post_db.hstore_available(conn_info)
     with metrics.record_counter(None) as counter:

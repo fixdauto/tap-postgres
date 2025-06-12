@@ -6,7 +6,7 @@ import psycopg2.extras
 import singer
 LOGGER = singer.get_logger()
 
-cursor_iter_size = 20000
+cursor_iter_size = 50000
 include_schemas_in_destination_stream_name = False
 
 def get_ssl_status(conn_config):

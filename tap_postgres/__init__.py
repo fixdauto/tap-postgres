@@ -835,7 +835,7 @@ def main_impl():
             LOGGER.info(
                 f"use_ssh_tunnel is not set or is false; connecting directly to {args.config['host']}:{args.config['port']}")
 
-        post_db.cursor_iter_size = int(args.config.get('itersize', '20000'))
+        post_db.cursor_iter_size = int(args.config.get('itersize', '50000'))
 
         post_db.include_schemas_in_destination_stream_name = (
             args.config.get('include_schemas_in_destination_stream_name') == 'true')

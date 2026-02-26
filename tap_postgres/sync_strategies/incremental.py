@@ -56,6 +56,10 @@ def sync_table(conn_info, stream, state, desired_columns, md_map, default_replic
 
     replication_key_sql_datatype = replication_key_column.get('sql-datatype')
 
+    extra_where = md_map.get((), {}).get('where-clause')
+    if extra_where:
+        LOGGER.info("Applying additional WHERE filter: %s", extra_where)
+
     hstore_available = post_db.hstore_available(conn_info)
     with metrics.record_counter(None) as counter:
         with post_db.open_connection(conn_info) as conn:
@@ -78,20 +82,32 @@ def sync_table(conn_info, stream, state, desired_columns, md_map, default_replic
                 cur.itersize = post_db.cursor_iter_size
                 LOGGER.info("Beginning new incremental replication sync %s", stream_version)
                 if replication_key_value:
+                    where_parts = ["{} >= '{}'::{}".format(
+                        post_db.prepare_columns_sql(replication_key), replication_key_value, replication_key_sql_datatype)]
+                    if extra_where:
+                        where_parts.append("({})".format(extra_where))
                     select_sql = """SELECT {}
                                     FROM {}
-                                    WHERE {} >= '{}'::{}
+                                    WHERE {}
                                     ORDER BY {} ASC""".format(','.join(escaped_columns),
                                                               post_db.fully_qualified_table_name(schema_name, stream['table_name']),
-                                                              post_db.prepare_columns_sql(replication_key), replication_key_value, replication_key_sql_datatype,
+                                                              ' AND '.join(where_parts),
                                                               post_db.prepare_columns_sql(replication_key))
                 else:
-                    #if not replication_key_value
-                    select_sql = """SELECT {}
-                                    FROM {}
-                                    ORDER BY {} ASC""".format(','.join(escaped_columns),
-                                                              post_db.fully_qualified_table_name(schema_name, stream['table_name']),
-                                                              post_db.prepare_columns_sql(replication_key))
+                    if extra_where:
+                        select_sql = """SELECT {}
+                                        FROM {}
+                                        WHERE {}
+                                        ORDER BY {} ASC""".format(','.join(escaped_columns),
+                                                                  post_db.fully_qualified_table_name(schema_name, stream['table_name']),
+                                                                  extra_where,
+                                                                  post_db.prepare_columns_sql(replication_key))
+                    else:
+                        select_sql = """SELECT {}
+                                        FROM {}
+                                        ORDER BY {} ASC""".format(','.join(escaped_columns),
+                                                                  post_db.fully_qualified_table_name(schema_name, stream['table_name']),
+                                                                  post_db.prepare_columns_sql(replication_key))
 
                 LOGGER.info("select statement: %s with itersize %s", select_sql, cur.itersize)
                 cur.execute(select_sql)

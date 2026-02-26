@@ -115,20 +115,34 @@ def sync_table(conn_info, stream, state, desired_columns, md_map):
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor, name='stitch_cursor') as cur:
                 cur.itersize = post_db.cursor_iter_size
 
+                extra_where = md_map.get((), {}).get('where-clause')
+                if extra_where:
+                    LOGGER.info("Applying additional WHERE filter: %s", extra_where)
+
                 xmin = singer.get_bookmark(state, stream['tap_stream_id'], 'xmin')
                 if xmin:
                     LOGGER.info("Resuming Full Table replication %s from xmin %s", nascent_stream_version, xmin)
+                    where_parts = ["age(xmin::xid) <= age('{}'::xid)".format(xmin)]
+                    if extra_where:
+                        where_parts.append("({})".format(extra_where))
                     select_sql = """SELECT {}, xmin::text::bigint
-                                      FROM {} where age(xmin::xid) <= age('{}'::xid)
+                                      FROM {} WHERE {}
                                      ORDER BY xmin::text::bigint ASC""".format(','.join(escaped_columns),
                                                                                post_db.fully_qualified_table_name(schema_name, stream['table_name']),
-                                                                               xmin)
+                                                                               ' AND '.join(where_parts))
                 else:
                     LOGGER.info("Beginning new Full Table replication %s", nascent_stream_version)
-                    select_sql = """SELECT {}, xmin::text::bigint
-                                      FROM {}
-                                     ORDER BY xmin::text::bigint ASC""".format(','.join(escaped_columns),
-                                                                               post_db.fully_qualified_table_name(schema_name, stream['table_name']))
+                    if extra_where:
+                        select_sql = """SELECT {}, xmin::text::bigint
+                                          FROM {} WHERE {}
+                                         ORDER BY xmin::text::bigint ASC""".format(','.join(escaped_columns),
+                                                                                   post_db.fully_qualified_table_name(schema_name, stream['table_name']),
+                                                                                   extra_where)
+                    else:
+                        select_sql = """SELECT {}, xmin::text::bigint
+                                          FROM {}
+                                         ORDER BY xmin::text::bigint ASC""".format(','.join(escaped_columns),
+                                                                                   post_db.fully_qualified_table_name(schema_name, stream['table_name']))
 
 
                 LOGGER.info("select %s with itersize %s", select_sql, cur.itersize)
